@@ -79,13 +79,14 @@ I haven’t tried using this extension in other browsers myself, but in theory i
 
 ## Project Structure
 
-5 files:
+6 files:
 
 - `manifest.json` – extension configuration (Manifest V3)
 - `content.js` – the core script that scans and marks result cards
 - `domains.json` – user‑editable list of domains to block
 - `README.md` – this documentation
 - `README-zh.md` – The Chinese translation of this document
+- `LICENSE` - Agreement statement
 
 ## License
 

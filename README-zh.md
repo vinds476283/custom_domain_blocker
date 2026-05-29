@@ -81,13 +81,14 @@ chrome://extensions
 
 ## 项目结构
 
-共 5 分文件:
+共 6 份文件:
 
 - `manifest.json` – 扩展配置文件（Manifest V3）
 - `content.js` – 核心脚本，负责扫描并标记搜索结果
 - `domains.json` – 用户可编辑的域名屏蔽列表
 - `README.md` – 本文档的英文翻译版本
 - `README-zh.md` – 本文档
+- `LICENSE` - 协议声明
 
 ## 许可证
 
