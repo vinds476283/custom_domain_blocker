@@ -21,23 +21,30 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+
 let blockedList = [];
 
 function loadDomains() {
     let url = chrome.runtime.getURL("domains.json");
-    fetch(url).then(res => {
-        if (!res.ok) throw new Error("erroe");
-        return res.json();
-    }).then(data => {
-        if (Array.isArray(data)) {
-            blockedList = data.map(d => d.toLowerCase());
-            console.log("yeah~", blockedList);
-        } else {
-            console.warn("style(?格式是style吧) error");
-        }
-    }).catch(err => {
-        console.error("error1", err);
-    });
+    return fetch(url)
+        .then(res => {
+            if (!res.ok) throw new Error("Failed to load domains.json");
+            return res.json();
+        })
+        .then(data => {
+            if (Array.isArray(data)) {
+                blockedList = data.map(d => d.toLowerCase());
+                console.log("Domains loaded:", blockedList);
+            } else {
+                console.warn("domains.json should contain an array");
+            }
+        })
+        .catch(err => {
+            console.error("Failed to load domains.json:", err);
+        })
+        .finally(() => {
+            scan();
+        });
 }
 
 function shouldBlock(url) {
@@ -97,11 +104,34 @@ function markBlocked(card) {
 }
 
 function handleCard(card, engine) {
+    if (card.getAttribute("data-ai-card") === "1") {
+        markBlocked(card);
+        console.log("AI result blocked");
+        return;
+    }
     let target = getRealUrl(card, engine);
     if (target && shouldBlock(target)) {
         markBlocked(card);
-        console.log("!" + target);
+        console.log("Blocked: " + target);
     }
+}
+
+function aichk(elem) {
+    if (!elem) return false;
+    let cn = (elem.className || "").toLowerCase();
+    let id = (elem.id || "").toLowerCase();
+    let t = cn.includes("qna_tlgacont") || cn.includes("extqna");
+    if (t) return true;
+    if (cn.includes("b_copilot") || cn.includes("b_ans")) return true;
+    if (id.includes("copilot") || id.includes("b_copilot_answer")) return true;
+    if (elem.getAttribute("data-bm") === "answer") return true;
+    if (elem.querySelector('[aria-label*="Copilot"], [aria-label*="Answer"]')) return true;
+    let itxt = elem.innerText || "";
+    if (itxt.includes("Copilot 生成") || itxt.includes("AI 生成") ||
+        itxt.includes("根据AI生成") || itxt.includes("Bing AI")) {
+        return true;
+    }
+    return false;
 }
 
 function getCards(engine) {
@@ -114,6 +144,40 @@ function getCards(engine) {
     } else if (engine === "bing") {
         let items = document.querySelectorAll("li.b_algo");
         for (let i = 0; i < items.length; i++) arr.push(items[i]);
+        let exts = ["div.b_algo", "div.b_card", "div.b_slideCard", "li.b_ad", "div.b_ad", ".b_ans", "[data-block-type]"];
+        for (let s of exts) {
+            let xs = document.querySelectorAll(s);
+            for (let c of xs)
+                if (!arr.includes(c)) arr.push(c);
+        }
+        let aisel = [
+            "div.qna_tlgacont", "div.extqna", "div[class*='qna_']",
+            "div.b_copilot", "div.b_ans.b_topans", "div[data-bm='answer']",
+            "div#b_copilot_answer", "div.copilot-area", "div.ai-answer"
+        ];
+        for (let sel of aisel) {
+            let ac = document.querySelectorAll(sel);
+            for (let c of ac) {
+                if (!arr.includes(c)) {
+                    c.setAttribute("data-ai-card", "1");
+                    arr.push(c);
+                }
+            }
+        }
+        let pot = document.querySelectorAll('[class*="qna"], [class*="copilot"], [class*="b_ans"], [id*="copilot"], [data-bm]');
+        for (let el of pot) {
+            let cont = el.closest(".qna_tlgacont, .b_copilot, .b_ans, div[data-bm='answer'], #b_copilot_answer, .b_card, li.b_algo, div.b_algo");
+            if (!cont) cont = el;
+            if (!arr.includes(cont) && aichk(cont)) {
+                cont.setAttribute("data-ai-card", "1");
+                arr.push(cont);
+            }
+        }
+        let topReg = document.querySelector("#b_results > div:first-child, .b_copilot_placeholder");
+        if (topReg && !arr.includes(topReg) && aichk(topReg)) {
+            topReg.setAttribute("data-ai-card", "1");
+            arr.push(topReg);
+        }
     }
     return arr;
 }
@@ -129,7 +193,7 @@ function scan() {
     let engine = whichEngine();
     if (!engine) return;
     let cards = getCards(engine);
-    console.log(`${cards.length} + (${engine})`);
+    console.log(`Scanning ${cards.length} cards on ${engine}`);
     for (let i = 0; i < cards.length; i++) {
         handleCard(cards[i], engine);
     }
@@ -137,17 +201,35 @@ function scan() {
 
 function watchPage() {
     let timer = null;
-    let observer = new MutationObserver(function() {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(scan, 200);
+    let obs = new MutationObserver(function(muts) {
+        let need = false;
+        for (let m of muts) {
+            if (m.addedNodes.length) {
+                for (let n of m.addedNodes) {
+                    if (n.nodeType === Node.ELEMENT_NODE) {
+                        let cls = (n.className || "").toLowerCase();
+                        if (cls.includes("qna") || cls.includes("copilot") || cls.includes("b_ans") || n.querySelector) {
+                            need = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (need) {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(scan, 200);
+        } else {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(scan, 500);
+        }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    obs.observe(document.body, { childList: true, subtree: true });
 }
 
 //
 function start() {
     loadDomains();
-    scan();
     watchPage();
 }
 

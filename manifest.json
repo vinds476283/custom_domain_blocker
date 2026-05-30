@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Custom Domain Blocker",
-    "version": "0.2",
+    "version": "0.3",
     "description": "Once the plugin is activated, when you search on google.com or bing.com and encounter a domain listed in domains.json, it will automatically turn all text in that card gray and add a strikethrough. You are free to modify the content of domains.json, but make sure it complies with the JSON file format.",
     "author": "vinds",
     "permissions": [],
